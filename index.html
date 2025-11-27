@@ -25,9 +25,10 @@
             --accent-blue: #38BDF8;
             --accent-green: #22C55E;
             --accent-red: #EF4444;
-            --paypal-color: 'rgba(56, 189, 248, 0.7)'; /* Blue */
-            --venmo-color: 'rgba(52, 211, 153, 0.7)';  /* Green */
-            --zelle-color: 'rgba(248, 113, 113, 0.7)';  /* Red */
+            /* Colors for JS */
+            --paypal-color: rgba(56, 189, 248, 1); /* Solid Blue */
+            --venmo-color: rgba(52, 211, 153, 1);  /* Solid Green */
+            --zelle-color: rgba(248, 113, 113, 1);  /* Solid Red */
         }
 
         body {
@@ -38,7 +39,7 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            overflow: hidden; /* No scrolling on the body */
+            overflow: hidden; 
         }
 
         /* --- Glass Navigation Bar --- */
@@ -51,7 +52,7 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: var(--glass-border);
-            flex-shrink: 0; /* Don't shrink nav */
+            flex-shrink: 0;
         }
 
         .nav-button {
@@ -75,15 +76,14 @@
 
         /* --- Main Content Area --- */
         .content-area {
-            flex-grow: 1; /* Fill remaining vertical space */
+            flex-grow: 1;
             padding: 24px;
-            overflow-y: auto; /* THIS is the scrolling container */
+            overflow-y: auto; 
             max-width: 1600px;
             width: 100%;
             margin: 0 auto;
             box-sizing: border-box; 
-            /* --- FIX: Hide by default until data is loaded --- */
-            display: none; 
+            display: none; /* Hide by default */
         }
 
         /* --- Tab Content Styling --- */
@@ -100,14 +100,13 @@
             padding: 24px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
             box-sizing: border-box;
-            /* Give charts a min height so they don't collapse */
             min-height: 350px; 
             display: flex;
             flex-direction: column;
         }
         .chart-container canvas {
             flex-grow: 1;
-            max-height: 500px; /* Stop charts from getting too tall */
+            max-height: 500px; 
         }
 
         /* --- Chart Titles --- */
@@ -159,7 +158,7 @@
             }
         }
         
-        /* --- FIX: File Loader Overlay --- */
+        /* --- File Loader Overlay --- */
         #loader-overlay {
             position: fixed;
             top: 0;
@@ -210,7 +209,7 @@
     </style>
 </head>
 <body>
-    <!-- FIX: File Loader Overlay -->
+    <!-- File Loader Overlay -->
     <div id="loader-overlay">
         <div class="loader-box">
             <h2>Load Your Data</h2>
@@ -295,46 +294,43 @@
             4: "Frozen Accounts"
         };
         
+        // --- FIX: Define colors for JS to use (no CSS variables) ---
+        const JS_COLORS = {
+            textLight: '#E2E8F0',
+            textMuted: '#94A3B8',
+            gridLight: 'rgba(255, 255, 255, 0.1)',
+            gridFaint: 'rgba(255, 255, 255, 0.05)',
+            glassBg: 'rgba(30, 41, 59, 0.5)',
+            paypal: 'rgba(56, 189, 248, 1)',
+            venmo: 'rgba(52, 211, 153, 1)',
+            zelle: 'rgba(248, 113, 113, 1)',
+            positive: 'rgba(52, 211, 153, 0.7)',
+            negative: 'rgba(248, 113, 113, 0.7)'
+        };
+
         // --- Main function to start the app ---
         document.addEventListener('DOMContentLoaded', () => {
-            
-            // --- THIS IS THE FIX ---
-            // Find the file input
             const fileInput = document.getElementById('csvFileInput');
             
-            // Listen for when the user selects a file
             fileInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
-                if (!file) {
-                    console.error("No file selected.");
-                    return;
-                }
+                if (!file) return;
                 
-                // Use PapaParse to read the local File object
-                // This does NOT require a web server and works by double-clicking
                 Papa.parse(file, {
                     header: true,
-                    dynamicTyping: true, // Automatically convert numbers
+                    dynamicTyping: true,
                     complete: function(results) {
-                        allData = results.data.filter(row => row.app_name && row.date); // Filter out empty rows
+                        allData = results.data.filter(row => row.app_name && row.date); 
                         console.log("Data loaded and parsed:", allData);
                         
-                        // Hide the loader overlay
                         document.getElementById('loader-overlay').style.display = 'none';
-                        
-                        // Show the main content
                         document.querySelector('.content-area').style.display = 'block';
                         
-                        // Show the default page (which will build its charts)
                         showPage('page-overview');
                     },
-                    error: function(err, file) {
-                        console.error("PapaParse Error:", err);
-                        alert("Error parsing CSV file. Please ensure it's the correct 'tableau_payments_data.csv' file.");
-                    }
+                    error: (err) => console.error("PapaParse Error:", err)
                 });
             });
-            // --- END OF THE FIX ---
         });
 
         // --- Tab Navigation Function ---
@@ -344,7 +340,7 @@
             document.getElementById(pageId).style.display = 'block';
             document.querySelector(`.nav-button[onclick="showPage('${pageId}')"]`).classList.add('active');
 
-            // --- "Lazy Load" the charts ---
+            // Lazy load charts
             switch(pageId) {
                 case 'page-overview':
                     buildOverviewKPIs();
@@ -398,8 +394,8 @@
                 return {
                     label: app,
                     data: appData,
-                    borderColor: app === 'PayPal' ? 'var(--accent-blue)' : (app === 'Venmo' ? 'var(--accent-green)' : 'var(--accent-red)'),
-                    backgroundColor: app === 'PayPal' ? 'var(--accent-blue)' : (app === 'Venmo' ? 'var(--accent-green)' : 'var(--accent-red)'),
+                    borderColor: app === 'PayPal' ? JS_COLORS.paypal : (app === 'Venmo' ? JS_COLORS.venmo : JS_COLORS.zelle),
+                    backgroundColor: app === 'PayPal' ? JS_COLORS.paypal : (app === 'Venmo' ? JS_COLORS.venmo : JS_COLORS.zelle),
                     fill: false,
                     tension: 0.1
                 };
@@ -428,8 +424,8 @@
                     datasets: [{
                         label: 'Average Sentiment Score',
                         data: topicData,
-                        backgroundColor: topicData.map(d => d > 0 ? 'rgba(52, 211, 153, 0.5)' : 'rgba(248, 113, 113, 0.5)'),
-                        borderColor: topicData.map(d => d > 0 ? 'var(--accent-green)' : 'var(--accent-red)'),
+                        backgroundColor: topicData.map(d => d > 0 ? JS_COLORS.positive : JS_COLORS.negative),
+                        borderColor: topicData.map(d => d > 0 ? JS_COLORS.venmo : JS_COLORS.zelle),
                         borderWidth: 1
                     }]
                 },
@@ -457,7 +453,7 @@
                         label: 'Total Review Count',
                         data: topicData,
                         backgroundColor: 'rgba(56, 189, 248, 0.5)',
-                        borderColor: 'var(--accent-blue)',
+                        borderColor: JS_COLORS.paypal,
                         borderWidth: 1
                     }]
                 },
@@ -487,8 +483,8 @@
                         data: appData,
                         fill: true,
                         backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                        borderColor: 'var(--accent-blue)',
-                        pointBackgroundColor: 'var(--accent-blue)',
+                        borderColor: JS_COLORS.paypal,
+                        pointBackgroundColor: JS_COLORS.paypal,
                     }]
                 },
                 options: chartOptions_Radar()
@@ -515,36 +511,48 @@
                         label: 'Review Share',
                         data: appData,
                         backgroundColor: [
-                            'var(--paypal-color)',
-                            'var(--venmo-color)',
-                            'var(--zelle-color)',
+                            JS_COLORS.paypal,
+                            JS_COLORS.venmo,
+                            JS_COLORS.zelle,
                         ],
-                        borderColor: 'var(--glass-bg)',
+                        borderColor: 'rgba(30, 41, 59, 0.5)', // glassBg
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'right', labels: { color: '#E2E8F0' } }
+                        legend: { 
+                            position: 'right', 
+                            labels: { color: JS_COLORS.textLight } // FIX: Use JS_COLORS
+                        }
                     }
                 }
             });
         }
         
-        // --- Shared Chart Options ---
+        // --- Shared Chart Options (FIXED COLORS) ---
         function chartOptions(axis) {
             return {
                 indexAxis: axis,
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false },
+                    legend: { 
+                        display: false,
+                        labels: { color: JS_COLORS.textLight } // FIX: Use JS_COLORS
+                    },
                     tooltip: chartOptions_Tooltip()
                 },
                 scales: {
-                    x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255, 255, 255, 0.05)' } },
-                    y: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+                    x: { 
+                        ticks: { color: JS_COLORS.textMuted }, // FIX: Use JS_COLORS
+                        grid: { color: JS_COLORS.gridFaint } // FIX: Use JS_COLORS
+                    },
+                    y: { 
+                        ticks: { color: JS_COLORS.textMuted }, // FIX: Use JS_COLORS
+                        grid: { color: JS_COLORS.gridLight } // FIX: Use JS_COLORS
+                    }
                 }
             };
         }
@@ -558,10 +566,10 @@
                 },
                 scales: {
                     r: {
-                        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
-                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                        pointLabels: { color: '#E2E8F0', font: { size: 14 } },
-                        ticks: { backdropColor: 'rgba(0, 0, 0, 0)', color: '#94A3B8' }
+                        angleLines: { color: JS_COLORS.gridLight }, // FIX: Use JS_COLORS
+                        grid: { color: JS_COLORS.gridLight }, // FIX: Use JS_COLORS
+                        pointLabels: { color: JS_COLORS.textLight, font: { size: 14 } }, // FIX: Use JS_COLORS
+                        ticks: { backdropColor: 'rgba(0, 0, 0, 0)', color: JS_COLORS.textMuted } // FIX: Use JS_COLORS
                     }
                 }
             };
