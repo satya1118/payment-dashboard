@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Payments - Competitive Analysis</title>
+    
+    <!-- Load Chart.js (for charts) and PapaParse (to read CSV) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    
+    <!-- Load Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- Base Setup --- */
+        :root {
+            --dark-bg: #0F172A;
+            --glass-bg: rgba(30, 41, 59, 0.5);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+            --text-light: #E2E8F0;
+            --text-muted: #94A3B8;
+            --accent-blue: #38BDF8;
+            --accent-green: #22C55E;
+            --accent-red: #EF4444;
+            --paypal-color: 'rgba(56, 189, 248, 0.7)'; /* Blue */
+            --venmo-color: 'rgba(52, 211, 153, 0.7)';  /* Green */
+            --zelle-color: 'rgba(248, 113, 113, 0.7)';  /* Red */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-light);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden; /* No scrolling on the body */
+        }
+
+        /* --- Glass Navigation Bar --- */
+        .glass-nav {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px;
+            background: rgba(30, 41, 59, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: var(--glass-border);
+            flex-shrink: 0; /* Don't shrink nav */
+        }
+
+        .nav-button {
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-button:hover { color: var(--text-light); background: var(--glass-bg); }
+        .nav-button.active {
+            color: var(--text-light);
+            border-bottom: 2px solid var(--accent-blue);
+            background: linear-gradient(0deg, rgba(56, 189, 248, 0.1), rgba(0,0,0,0));
+        }
+
+        /* --- Main Content Area --- */
+        .content-area {
+            flex-grow: 1; /* Fill remaining vertical space */
+            padding: 24px;
+            overflow-y: auto; /* THIS is the scrolling container */
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+            box-sizing: border-box; 
+            /* --- FIX: Hide by default until data is loaded --- */
+            display: none; 
+        }
+
+        /* --- Tab Content Styling --- */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* --- "Glassmorphism" Container --- */
+        .chart-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: var(--glass-border);
+            padding: 24px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            box-sizing: border-box;
+            /* Give charts a min height so they don't collapse */
+            min-height: 350px; 
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-container canvas {
+            flex-grow: 1;
+            max-height: 500px; /* Stop charts from getting too tall */
+        }
+
+        /* --- Chart Titles --- */
+        .chart-container h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            font-weight: 500;
+            color: #CBD5E1;
+            border-bottom: var(--glass-border);
+            padding-bottom: 12px;
+            flex-shrink: 0;
+        }
+        
+        /* --- Grid Layouts for Tabs (FIXED) --- */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .overview-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+        }
+        .topic-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        /* --- KPI Card Specific Styles --- */
+        .kpi-card { text-align: center; min-height: 150px; justify-content: center; }
+        .kpi-title { font-size: 1rem; font-weight: 400; color: var(--text-muted); margin-bottom: 8px; }
+        .kpi-value { font-size: 2.75rem; font-weight: 700; line-height: 1.1; }
+        .kpi-value.positive { color: var(--accent-green); }
+        .kpi-value.negative { color: var(--accent-red); }
+        .kpi-value.neutral { color: var(--text-light); }
+
+        /* --- Responsive Design for Mobile --- */
+        @media (max-width: 900px) {
+            .main-grid, .overview-grid, .topic-grid {
+                grid-template-columns: 1fr; /* Stack all charts on mobile */
+            }
+        }
+        
+        /* --- FIX: File Loader Overlay --- */
+        #loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.8); /* Dark background */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .loader-box {
+            background: var(--glass-bg);
+            border: var(--glass-border);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+        .loader-box h2 {
+            margin-top: 0;
+            font-size: 1.5rem;
+            color: var(--text-light);
+        }
+        .loader-box p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            max-width: 300px;
+        }
+        .loader-box input[type="file"] {
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            color: var(--text-muted);
+            background: rgba(0,0,0,0.2);
+            border: 1px dashed var(--text-muted);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+        }
+        .loader-box input[type="file"]::-webkit-file-upload-button {
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- FIX: File Loader Overlay -->
+    <div id="loader-overlay">
+        <div class="loader-box">
+            <h2>Load Your Data</h2>
+            <p>Please select your <code>tableau_payments_data.csv</code> file to start the dashboard.</p>
+            <input type="file" id="csvFileInput" accept=".csv">
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <nav class="glass-nav">
+        <button class="nav-button active" onclick="showPage('page-overview')">Executive Overview</button>
+        <button class="nav-button" onclick="showPage('page-trends')">Sentiment Trends</button>
+        <button class="nav-button" onclick="showPage('page-topics')">Topic Analysis</button>
+    </nav>
+
+    <!-- Main Content Area (Hidden by default) -->
+    <main class="content-area">
+
+        <!-- Tab 1: Overview (KPIs + NEW Charts) -->
+        <section id="page-overview" class="tab-content active">
+            <div class="kpi-grid">
+                <div class="chart-container kpi-card">
+                    <div class="kpi-title">Overall Avg. Sentiment</div>
+                    <div class="kpi-value neutral" id="kpi-avg-sentiment">...</div>
+                </div>
+                <div class="chart-container kpi-card">
+                    <div class="kpi-title">Overall Avg. User Rating</div>
+                    <div class="kpi-value neutral" id="kpi-avg-rating">...</div>
+                </div>
+                <div class="chart-container kpi-card">
+                    <div class="kpi-title">Total Reviews Analyzed</div>
+                    <div class="kpi-value neutral" id="kpi-total-reviews">...</div>
+                </div>
+            </div>
+            <div class="overview-grid">
+                <div class="chart-container">
+                    <h2>Sentiment by App</h2>
+                    <canvas id="appRadarChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>Review Share by App</h2>
+                    <canvas id="appDoughnutChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: Sentiment Trends (Line Chart) -->
+        <section id="page-trends" class="tab-content">
+            <div class="chart-container">
+                <h2>Sentiment Score Over Time (FinBERT Model)</h2>
+                <canvas id="sentimentLineChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Tab 3: Topic Analysis (NEW 2-Chart Layout) -->
+        <section id="page-topics" class="tab-content">
+             <div class="topic-grid">
+                <div class="chart-container">
+                    <h2>Average Sentiment by Topic</h2>
+                    <canvas id="topicSentimentChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>Volume of Complaints by Topic</h2>
+                    <canvas id="topicCountChart"></canvas>
+                </div>
+             </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- Global variables for data and charts ---
+        let allData = [];
+        let chartInstances = {}; // To store our charts
+        
+        // Map our Python topics to clean labels
+        const TOPIC_LABELS = {
+            0: "Acct/Bank Issues",
+            1: "Ease of Use",
+            2: "Fees & Reliability",
+            3: "Transfers & Scams",
+            4: "Frozen Accounts"
+        };
+        
+        // --- Main function to start the app ---
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- THIS IS THE FIX ---
+            // Find the file input
+            const fileInput = document.getElementById('csvFileInput');
+            
+            // Listen for when the user selects a file
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) {
+                    console.error("No file selected.");
+                    return;
+                }
+                
+                // Use PapaParse to read the local File object
+                // This does NOT require a web server and works by double-clicking
+                Papa.parse(file, {
+                    header: true,
+                    dynamicTyping: true, // Automatically convert numbers
+                    complete: function(results) {
+                        allData = results.data.filter(row => row.app_name && row.date); // Filter out empty rows
+                        console.log("Data loaded and parsed:", allData);
+                        
+                        // Hide the loader overlay
+                        document.getElementById('loader-overlay').style.display = 'none';
+                        
+                        // Show the main content
+                        document.querySelector('.content-area').style.display = 'block';
+                        
+                        // Show the default page (which will build its charts)
+                        showPage('page-overview');
+                    },
+                    error: function(err, file) {
+                        console.error("PapaParse Error:", err);
+                        alert("Error parsing CSV file. Please ensure it's the correct 'tableau_payments_data.csv' file.");
+                    }
+                });
+            });
+            // --- END OF THE FIX ---
+        });
+
+        // --- Tab Navigation Function ---
+        function showPage(pageId) {
+            document.querySelectorAll('.tab-content').forEach(s => s.style.display = 'none');
+            document.querySelectorAll('.nav-button').forEach(b => b.classList.remove('active'));
+            document.getElementById(pageId).style.display = 'block';
+            document.querySelector(`.nav-button[onclick="showPage('${pageId}')"]`).classList.add('active');
+
+            // --- "Lazy Load" the charts ---
+            switch(pageId) {
+                case 'page-overview':
+                    buildOverviewKPIs();
+                    buildRadarChart();
+                    buildDoughnutChart();
+                    break;
+                case 'page-trends':
+                    buildLineChart();
+                    break;
+                case 'page-topics':
+                    buildTopicSentimentChart();
+                    buildTopicCountChart();
+                    break;
+            }
+        }
+        
+        // --- KPI Card Function ---
+        function buildOverviewKPIs() {
+            if (chartInstances['kpis_built']) return;
+            const totalReviews = allData.length;
+            const avgSentiment = allData.reduce((acc, row) => acc + (row.sentiment_score || 0), 0) / totalReviews;
+            const avgRating = allData.reduce((acc, row) => acc + (row.rating || 0), 0) / totalReviews;
+
+            const kpiSent = document.getElementById('kpi-avg-sentiment');
+            kpiSent.textContent = avgSentiment.toFixed(2);
+            kpiSent.className = `kpi-value ${avgSentiment > 0.05 ? 'positive' : (avgSentiment < -0.05 ? 'negative' : 'neutral')}`;
+            document.getElementById('kpi-avg-rating').textContent = avgRating.toFixed(2);
+            document.getElementById('kpi-total-reviews').textContent = totalReviews.toLocaleString();
+            chartInstances['kpis_built'] = true;
+        }
+
+        // --- Chart Building Functions ---
+
+        function buildLineChart() {
+            if (chartInstances['lineChart']) chartInstances['lineChart'].destroy();
+            const sentimentByMonth = {}; 
+            for (const row of allData) {
+                const month = row.date.substring(0, 7);
+                const app = row.app_name;
+                const key = `${month}-${app}`;
+                if (!sentimentByMonth[key]) sentimentByMonth[key] = { sum: 0, count: 0 };
+                sentimentByMonth[key].sum += row.sentiment_score;
+                sentimentByMonth[key].count++;
+            }
+            const allMonths = [...new Set(allData.map(row => row.date.substring(0, 7)))].sort();
+            const datasets = ['PayPal', 'Venmo', 'Zelle'].map(app => {
+                const appData = allMonths.map(month => {
+                    const key = `${month}-${app}`;
+                    return sentimentByMonth[key] ? sentimentByMonth[key].sum / sentimentByMonth[key].count : null;
+                });
+                return {
+                    label: app,
+                    data: appData,
+                    borderColor: app === 'PayPal' ? 'var(--accent-blue)' : (app === 'Venmo' ? 'var(--accent-green)' : 'var(--accent-red)'),
+                    backgroundColor: app === 'PayPal' ? 'var(--accent-blue)' : (app === 'Venmo' ? 'var(--accent-green)' : 'var(--accent-red)'),
+                    fill: false,
+                    tension: 0.1
+                };
+            });
+            const ctx = document.getElementById('sentimentLineChart').getContext('2d');
+            chartInstances['lineChart'] = new Chart(ctx, { type: 'line', data: { labels: allMonths, datasets }, options: chartOptions('y') });
+        }
+
+        function buildTopicSentimentChart() {
+            if (chartInstances['topicSentimentChart']) chartInstances['topicSentimentChart'].destroy();
+            const sentimentByTopic = {};
+            for (const row of allData) {
+                const topic = TOPIC_LABELS[row.topic] || "Unknown";
+                if (!sentimentByTopic[topic]) sentimentByTopic[topic] = { sum: 0, count: 0 };
+                sentimentByTopic[topic].sum += row.sentiment_score;
+                sentimentByTopic[topic].count++;
+            }
+            const topicLabels = Object.keys(sentimentByTopic);
+            const topicData = topicLabels.map(topic => sentimentByTopic[topic].sum / sentimentByTopic[topic].count);
+            
+            const ctx = document.getElementById('topicSentimentChart').getContext('2d');
+            chartInstances['topicSentimentChart'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topicLabels,
+                    datasets: [{
+                        label: 'Average Sentiment Score',
+                        data: topicData,
+                        backgroundColor: topicData.map(d => d > 0 ? 'rgba(52, 211, 153, 0.5)' : 'rgba(248, 113, 113, 0.5)'),
+                        borderColor: topicData.map(d => d > 0 ? 'var(--accent-green)' : 'var(--accent-red)'),
+                        borderWidth: 1
+                    }]
+                },
+                options: chartOptions('x') // Horizontal bar chart
+            });
+        }
+        
+        function buildTopicCountChart() {
+            if (chartInstances['topicCountChart']) chartInstances['topicCountChart'].destroy();
+            const topicCounts = {};
+            for (const row of allData) {
+                const topic = TOPIC_LABELS[row.topic] || "Unknown";
+                if (!topicCounts[topic]) topicCounts[topic] = 0;
+                topicCounts[topic]++;
+            }
+            const topicLabels = Object.keys(topicCounts);
+            const topicData = topicLabels.map(topic => topicCounts[topic]);
+            
+            const ctx = document.getElementById('topicCountChart').getContext('2d');
+            chartInstances['topicCountChart'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topicLabels,
+                    datasets: [{
+                        label: 'Total Review Count',
+                        data: topicData,
+                        backgroundColor: 'rgba(56, 189, 248, 0.5)',
+                        borderColor: 'var(--accent-blue)',
+                        borderWidth: 1
+                    }]
+                },
+                options: chartOptions('y') // Vertical bar chart
+            });
+        }
+        
+        function buildRadarChart() {
+            if (chartInstances['radarChart']) chartInstances['radarChart'].destroy();
+            const sentimentByApp = {};
+            for (const row of allData) {
+                const app = row.app_name;
+                if (!sentimentByApp[app]) sentimentByApp[app] = { sum: 0, count: 0 };
+                sentimentByApp[app].sum += row.sentiment_score;
+                sentimentByApp[app].count++;
+            }
+            const appLabels = Object.keys(sentimentByApp);
+            const appData = appLabels.map(app => sentimentByApp[app].sum / sentimentByApp[app].count);
+            
+            const ctx = document.getElementById('appRadarChart').getContext('2d');
+            chartInstances['radarChart'] = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: appLabels,
+                    datasets: [{
+                        label: 'Average Sentiment',
+                        data: appData,
+                        fill: true,
+                        backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                        borderColor: 'var(--accent-blue)',
+                        pointBackgroundColor: 'var(--accent-blue)',
+                    }]
+                },
+                options: chartOptions_Radar()
+            });
+        }
+        
+        function buildDoughnutChart() {
+            if (chartInstances['doughnutChart']) chartInstances['doughnutChart'].destroy();
+            const appCounts = {};
+            for (const row of allData) {
+                const app = row.app_name;
+                if (!appCounts[app]) appCounts[app] = 0;
+                appCounts[app]++;
+            }
+            const appLabels = Object.keys(appCounts);
+            const appData = appLabels.map(app => appCounts[app]);
+
+            const ctx = document.getElementById('appDoughnutChart').getContext('2d');
+            chartInstances['doughnutChart'] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: appLabels,
+                    datasets: [{
+                        label: 'Review Share',
+                        data: appData,
+                        backgroundColor: [
+                            'var(--paypal-color)',
+                            'var(--venmo-color)',
+                            'var(--zelle-color)',
+                        ],
+                        borderColor: 'var(--glass-bg)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#E2E8F0' } }
+                    }
+                }
+            });
+        }
+        
+        // --- Shared Chart Options ---
+        function chartOptions(axis) {
+            return {
+                indexAxis: axis,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: chartOptions_Tooltip()
+                },
+                scales: {
+                    x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255, 255, 255, 0.05)' } },
+                    y: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+                }
+            };
+        }
+        function chartOptions_Radar() {
+             return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: chartOptions_Tooltip()
+                },
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        pointLabels: { color: '#E2E8F0', font: { size: 14 } },
+                        ticks: { backdropColor: 'rgba(0, 0, 0, 0)', color: '#94A3B8' }
+                    }
+                }
+            };
+        }
+        function chartOptions_Tooltip() {
+            return {
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                titleColor: '#FFFFFF',
+                bodyColor: '#FFFFFF',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1
+            };
+        }
+
+    </script>
+</body>
+</html>
